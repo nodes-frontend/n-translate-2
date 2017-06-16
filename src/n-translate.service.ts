@@ -8,6 +8,7 @@ import { LocalStorageService } from 'ngx-webstorage';
 import { Observable } from 'rxjs/Observable';
 import { BehaviorSubject } from 'rxjs/BehaviorSubject';
 import 'rxjs/add/operator/catch';
+import 'rxjs/add/operator/share';
 import 'rxjs/add/observable/throw';
 
 interface IDataStore {
@@ -33,6 +34,9 @@ export class NTranslate {
     private observableStore: {
         [key: string]: Observable<any>
     } = {};
+    private transmissionsStore: {
+        [key: string]: any
+    } = {};
 
     constructor(
         private options: NTranslateConfig,
@@ -44,7 +48,6 @@ export class NTranslate {
 
         this._language = <BehaviorSubject<any>>new BehaviorSubject({});
 
-        //this.errorHandler.handleError(error.toString());
     }
 
     public  getAllSections(forceFetch?: boolean): Observable<any> {
@@ -139,17 +142,30 @@ export class NTranslate {
     }
 
     private getFromApi(section?: string): Observable<any> {
-        return this.requestHelper(section)
+
+        const sectionName = section ? section : 'ALL';
+
+        if(this.transmissionsStore[sectionName]) {
+            if(this.config.debugEnabled) {
+                console.info(`Already fetching via HTTP for section ${sectionName} - returning existing transmission`);
+            }
+            return this.transmissionsStore[sectionName];
+        }
+
+        this.transmissionsStore[sectionName] = this.requestHelper(section)
             .flatMap((response: Response) => {
 
                 const body = response.json();
-                const sectionName = section ? section : 'ALL';
+
 
                 this.persistInStorage(sectionName, body.data);
                 this.setExpiration();
 
                 return this.setObservable(sectionName, body.data);
-            });
+            })
+            .share();
+
+        return this.transmissionsStore[sectionName];
     }
 
     private persistInStorage(key: string, value: string | number) {

@@ -3,9 +3,17 @@ import {CommonModule} from '@angular/common';
 import {NTranslateConfig, nTranslateConfigFactory} from './n-translate.config';
 import {NTranslate} from './n-translate.service';
 import {Ng2Webstorage} from 'ngx-webstorage';
+import {NEndpoints, NHttpConfig, NHttpModule} from 'n-http-2';
 
 export * from './n-translate.config';
 export * from './n-translate.service';
+
+export function createNHttpConfig() {
+    return new NHttpConfig({});
+}
+export function createNEndpointsConfig() {
+    return new NEndpoints({});
+}
 
 @NgModule({
     imports: [
@@ -13,6 +21,14 @@ export * from './n-translate.service';
         Ng2Webstorage.forRoot({
             prefix: 'nt2',
             caseSensitive: true
+        }),
+        NHttpModule.forRoot({
+            provide: NHttpConfig,
+            useFactory: (createNHttpConfig)
+        },
+        {
+            provide: NEndpoints,
+            useFactory: (createNEndpointsConfig)
         })
     ],
     providers: [
