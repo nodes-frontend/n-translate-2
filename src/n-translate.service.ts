@@ -11,22 +11,22 @@ import 'rxjs/add/operator/catch';
 import 'rxjs/add/operator/share';
 import 'rxjs/add/observable/throw';
 
-interface IDataStore {
+declare interface IDataStore {
     keys: {};
     language: {};
 };
+
+declare interface Window {
+    navigator: any;
+}
+declare const window: Window;
 
 @Injectable()
 export class NTranslate {
 
     private config: INTranslateConfig;
 
-    private _language: BehaviorSubject<{[key: string]: string}>;
-
-    private dataStore: IDataStore = {
-        keys: {},
-        language: {}
-    };
+    private language: BehaviorSubject<{[key: string]: string}>;
 
     private subjectStore: {
         [key: string]: BehaviorSubject<any>;
@@ -46,11 +46,9 @@ export class NTranslate {
     ) {
         this.config = options.getConfig();
 
-        this._language = <BehaviorSubject<any>>new BehaviorSubject({});
-
     }
 
-    public  getAllSections(forceFetch?: boolean): Observable<any> {
+    public getAllSections(forceFetch?: boolean): Observable<any> {
 
         if(this.isExpired() || forceFetch) {
 
@@ -59,7 +57,7 @@ export class NTranslate {
                     - pulling from API - because ${this.isExpired() ? 'isExpired' : 'forceFetch'}`);
             }
 
-            return this.getFromApi();
+            return this.getKeysFromApi();
         }
 
         if(this.observableStore.hasOwnProperty('ALL')) {
@@ -84,7 +82,7 @@ export class NTranslate {
             console.info(`nTranslate getSection getAllSections - pulling from API`);
         }
 
-        return this.getFromApi();
+        return this.getKeysFromApi();
 
     }
 
@@ -97,7 +95,7 @@ export class NTranslate {
                     - pulling from API - because ${this.isExpired() ? 'isExpired' : 'forceFetch'}`);
             }
 
-            return this.getFromApi(sectionName);
+            return this.getKeysFromApi(sectionName);
         }
 
         if(this.observableStore.hasOwnProperty(sectionName)) {
@@ -122,14 +120,32 @@ export class NTranslate {
             console.info(`nTranslate getSection (${sectionName}) - pulling from API`);
         }
 
-        return this.getFromApi(sectionName);
+        return this.getKeysFromApi(sectionName);
 
     }
+
+    public getLanguages(forceFetch?: boolean) {}
+
+    public getBestFitLanguage() {}
+
+    public getActiveLanguage() {}
+
+    public getBrowserCultureLanguage(): string {
+        if(typeof window === 'undefined' || typeof window.navigator === 'undefined') {
+            return undefined;
+        }
+
+        let browserCultureLang: any = window.navigator.languages ? window.navigator.languages[0] : null;
+        browserCultureLang = browserCultureLang || window.navigator.language || window.navigator.browserLanguage || window.navigator.userLanguage;
+
+        return browserCultureLang;
+    }
+
+    public setLanguage(forceReload = true) {}
 
     private getObservable(sectionName: string): Observable<any> {
         return this.observableStore[sectionName];
     }
-
     private setObservable(sectionName: string, data: any): Observable<any> {
         if(!this.observableStore.hasOwnProperty(sectionName)) {
             this.subjectStore[sectionName] = new BehaviorSubject(data);
@@ -141,7 +157,7 @@ export class NTranslate {
         return this.observableStore[sectionName];
     }
 
-    private getFromApi(section?: string): Observable<any> {
+    private getKeysFromApi(section?: string): Observable<any> {
 
         const sectionName = section ? section : 'ALL';
 
@@ -152,7 +168,7 @@ export class NTranslate {
             return this.transmissionsStore[sectionName];
         }
 
-        this.transmissionsStore[sectionName] = this.requestHelper(section)
+        this.transmissionsStore[sectionName] = this.requestHelper('keys', section)
             .flatMap((response: Response) => {
 
                 const body = response.json();
@@ -168,10 +184,33 @@ export class NTranslate {
         return this.transmissionsStore[sectionName];
     }
 
+    private getLanguagesFromApi(all?: boolean) {
+        // TODO CONST THIS
+        if(this.transmissionsStore['LANGUAGE']) {
+            if(this.config.debugEnabled) {
+                console.info(`Already fetching via HTTP for languages - returning existing transmission`);
+            }
+            return this.transmissionsStore['LANGUAGE'];
+        }
+
+        this.transmissionsStore['LANGUAGE'] = this.requestHelper(all ? 'bestFit' : 'languages')
+            .flatMap((response: Response) => {
+
+                const body = response.json();
+
+
+                this.persistInStorage('LANGUAGE', body.data);
+                this.setExpiration();
+
+                return this.setObservable(sectionName, body.data);
+            })
+            .share();
+
+        return this.transmissionsStore[sectionName];
+    }
+
     private persistInStorage(key: string, value: string | number) {
         const k = this.config.storageIdentifier + '|' + key;
-
-        this.dataStore.keys[key] = value;
 
         this.localStorage.store(k, value);
     }
@@ -203,26 +242,40 @@ export class NTranslate {
         return now > expires;
     }
 
-    private requestHelper(section?: string) {
+    private requestHelper(slug: 'keys' | 'languages' | 'bestFit', section?: string, locale?: string) {
         const headers: Headers = new Headers({
             'X-Application-Id': this.config.appId,
             'X-Rest-Api-Key': this.config.apiKey
         });
+        if(locale) {
+            headers.append('X-Accept-Language', locale);
+        }
 
         const url = [
             this.config.rootUrl,
             this.config.apiVersion,
             'translate',
-            this.config.platform,
-            'keys'
+            this.config.platform
         ];
 
-        if(section) {
-            url.push(section);
+        switch (slug) {
+            case 'keys':
+                url.push('keys');
+                if(section) {
+                    url.push(section);
+                }
+                break;
+            case 'languages':
+                url.push('languages');
+                break;
+            case 'bestFit':
+                url.push('languages/best_fit');
+                break;
+            default:
+                url.push('keys');
         }
 
-        return this.http.get(url.join('/'), {headers: headers})
-            // .map((response) => response.json());
+        return this.http.get(url.join('/'), {headers: headers});
 
     }
 
