@@ -1,4 +1,4 @@
-# n-translate-2
+# ⛔️ [DEPRECATED] n-translate-2
 
 ## Installation
 
