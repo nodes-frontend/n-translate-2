@@ -1,4 +1,5 @@
-# ⛔️ [DEPRECATED] n-translate-2
+# n-translate-2
+_Not maintained by Nodes anymore_
 
 ## Installation
 
